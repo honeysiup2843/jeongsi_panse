@@ -1,0 +1,158 @@
+/* 엔진 검증 — 과거에 실제로 터졌던 두 버그(E2 포화, E8 잣대 불일치)를 회귀 테스트로 고정 */
+const E = require('./_load');
+const { group, ok, info, done } = require('./harness');
+const { STD_MAX, pctToStd, stdToPct, calibrate, tierOf, prob, analyze, DEF_TH, TIER_ORDER } = E;
+
+const student = (p, over) => Object.assign({
+  kor:  { std: Math.round(pctToStd(p, 'kor')),  pct: p },
+  math: { std: Math.round(pctToStd(p, 'math')), pct: p, sel: '미적분' },
+  eng:  { grade: 2 },
+  tam:  [{ std: Math.round(pctToStd(p, 'tam')), pct: p }, { std: Math.round(pctToStd(p, 'tam')), pct: p }],
+  tamType: '과탐'
+}, over);
+
+const dist = r => r.reduce((a, x) => (a[x.tier] = (a[x.tier] || 0) + 1, a), {});
+const find = (r, u, d) => r.find(x => x.u === u && x.d === d);
+
+group('[E1] 표준↔백분위 대응표');
+{
+  let bad = 0;
+  for (const [a, p] of [['kor', 96], ['kor', 100], ['math', 97], ['math', 88], ['tam', 94], ['tam', 100]])
+    if (Math.abs(stdToPct(pctToStd(p, a), a) - p) >= 1.5) bad++;
+  ok('백분위 → 표준 → 백분위 왕복 오차 1.5 미만', bad === 0);
+  ok('만점 표준점수를 넘지 않음',
+    ['kor', 'math', 'tam'].every(a => pctToStd(100, a) <= STD_MAX[a]));
+  ok('백분위가 오르면 표준점수도 오름 (단조)',
+    ['kor', 'math', 'tam'].every(a =>
+      [30, 50, 70, 90, 95, 99, 100].every((p, i, ar) => i === 0 || pctToStd(p, a) > pctToStd(ar[i - 1], a))));
+}
+
+group('[E2] 회귀: 상위권 커트 포화 (정규분포 근사 시절 버그)');
+{
+  const r = analyze(student(96), DEF_TH);
+  ok('환산총점이 0~1000 안', r.every(x => x.score >= 0 && x.score <= 1000),
+    `${Math.min(...r.map(x => x.score)).toFixed(1)} ~ ${Math.max(...r.map(x => x.score)).toFixed(1)}`);
+  ok('합격선 환산총점이 1000에 붙지 않음', Math.max(...r.map(x => x.cutTotal)) < 995,
+    `최대 ${Math.max(...r.map(x => x.cutTotal)).toFixed(1)}`);
+  const top = r.filter(x => x.cutP >= 98);
+  const uniq = new Set(top.map(x => x.cutTotal.toFixed(1))).size;
+  ok('백분위 98 이상 학과들의 커트가 서로 구분됨', uniq >= top.length * 0.5,
+    `${top.length}개 중 고유값 ${uniq}개`);
+}
+
+group('[E3] 단조성');
+{
+  const base = analyze(student(95), DEF_TH);
+  const lo = analyze(student(95, { kor: { std: 114, pct: 90 } }), DEF_TH);
+  const hi = analyze(student(95, { kor: { std: 137, pct: 100 } }), DEF_TH);
+  ok('국어 성적이 오르면 어떤 학과에서도 격차가 줄지 않음',
+    base.every((x, i) => lo[i].diff <= x.diff + 1e-9 && x.diff <= hi[i].diff + 1e-9));
+  const e5 = analyze(student(95, { eng: { grade: 5 } }), DEF_TH);
+  ok('영어 등급이 나빠지면 어떤 학과에서도 격차가 늘지 않음',
+    base.every((x, i) => e5[i].diff <= x.diff + 1e-9));
+}
+
+group('[E4] 반영비율이 실제로 결과를 가르는가');
+{
+  const mathType = student(95, { kor: { std: 114, pct: 90 }, math: { std: 139, pct: 100, sel: '미적분' } });
+  const korType  = student(95, { kor: { std: 137, pct: 100 }, math: { std: 116, pct: 90, sel: '확률과통계' } });
+  const rm = analyze(mathType, DEF_TH), rk = analyze(korType, DEF_TH);
+  const sg = find(rm, '서강대', '경영학부').diff - find(rk, '서강대', '경영학부').diff;
+  const ss = find(rm, '숭실대', '경영학부').diff - find(rk, '숭실대', '경영학부').diff;
+  ok('수학 43.3% 대학이 수학 20% 대학보다 수학형에게 유리', sg > ss,
+    `서강대 우위 ${sg.toFixed(2)}%p vs 숭실대 우위 ${ss.toFixed(2)}%p`);
+}
+
+group('[E5] 영어 반영방식별 민감도');
+{
+  const a1 = analyze(student(95, { eng: { grade: 1 } }), DEF_TH);
+  const a4 = analyze(student(95, { eng: { grade: 4 } }), DEF_TH);
+  const drop = (u, d) => find(a4, u, d).diff - find(a1, u, d).diff;
+  [['연세대', '경영학과'], ['고려대', '경영대학'], ['서강대', '경영학부'],
+   ['중앙대', '경영학부'], ['건국대', '경영학과']].forEach(([u, d]) =>
+    info(`${u} ${d}: ${drop(u, d).toFixed(2)}%p`));
+  ok('영어 감점이 가파른 중앙대가 완만한 건국대보다 타격이 큼',
+    drop('중앙대', '경영학부') < drop('건국대', '경영학과'));
+  ok('모든 대학에서 영어 하락이 손해로만 작용',
+    a1.every((x, i) => a4[i].diff <= x.diff + 1e-9));
+}
+
+group('[E6] 회귀: 표준점수형 vs 백분위형 잣대 불일치 (대응표 보정 이전 버그)');
+{
+  // 표준점수와 백분위가 서로 어긋나게 입력된 성적표 — 실제 성적표에서 흔함
+  const skewed = {
+    kor:  { std: 131, pct: 96 },
+    math: { std: 135, pct: 97, sel: '미적분' },
+    eng:  { grade: 2 },
+    tam:  [{ std: 68, pct: 94 }, { std: 66, pct: 91 }],
+    tamType: '과탐'
+  };
+  const cal = calibrate(skewed);
+  ok('보정값이 0이 아님 (성적표가 대응표와 어긋남을 감지)',
+    Math.abs(cal.kor) > 1 || Math.abs(cal.math) > 1,
+    `국 ${cal.kor.toFixed(1)} 수 ${cal.math.toFixed(1)} 탐 ${cal.tam.toFixed(1)}`);
+
+  const snap = {}; for (const k in E.PROFILES) snap[k] = E.PROFILES[k].base;
+  const run = b => { for (const k in E.PROFILES) E.PROFILES[k].base = b; return analyze(skewed, DEF_TH); };
+  const asStd = run('std'), asPct = run('pct');
+  for (const k in E.PROFILES) E.PROFILES[k].base = snap[k];
+
+  const gaps = asStd.map((x, i) => Math.abs(x.diff - asPct[i].diff));
+  const avg = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+  const match = asStd.filter((x, i) => x.tier === asPct[i].tier).length / asStd.length;
+  ok('같은 학과를 두 방식으로 계산한 격차가 평균 1.0%p 미만', avg < 1.0, `평균 ${avg.toFixed(2)}%p`);
+  ok('두 방식의 5단계 판정 일치율 80% 이상', match >= 0.8, `${(match * 100).toFixed(0)}%`);
+}
+
+group('[E7] 5단계 경계값');
+{
+  const t = DEF_TH;
+  ok('경계값 위는 상위 단계', tierOf(t.하향, t) === '하향' && tierOf(t.적정, t) === '적정');
+  ok('경계값 바로 아래는 하위 단계',
+    tierOf(t.하향 - 1e-6, t) === '적정' && tierOf(t.적정 - 1e-6, t) === '소신' &&
+    tierOf(t.소신 - 1e-6, t) === '상향' && tierOf(t.상향 - 1e-6, t) === '위험');
+  ok('극단값도 다섯 단계 안에 들어옴',
+    TIER_ORDER.includes(tierOf(999, t)) && TIER_ORDER.includes(tierOf(-999, t)));
+  ok('합격확률: 격차 0 → 50%', prob(0) === 50);
+  ok('합격확률 단조증가', [-9, -3, -1, 0, 1, 3, 9].every((d, i, a) => i === 0 || prob(d) >= prob(a[i - 1])));
+  ok('합격확률 0~100 범위', [-99, 99].every(d => prob(d) >= 0 && prob(d) <= 100));
+}
+
+group('[E8] 성적대별 분포가 합리적으로 이동');
+{
+  const rows = [99, 95, 90, 82].map(p => [p, dist(analyze(student(p), DEF_TH))]);
+  rows.forEach(([p, d]) =>
+    info(`백분위 ${p}: ` + TIER_ORDER.map(t => `${t} ${String(d[t] || 0).padStart(3)}`).join('  ')));
+  const safe = rows.map(([, d]) => d.하향 || 0);
+  ok('성적이 낮아질수록 안전(하향) 학과가 줄어듦',
+    safe.every((v, i) => i === 0 || v <= safe[i - 1]), safe.join(' → '));
+  const risk = rows.map(([, d]) => d.위험 || 0);
+  ok('성적이 낮아질수록 위험 학과가 늘어남',
+    risk.every((v, i) => i === 0 || v >= risk[i - 1]), risk.join(' → '));
+}
+
+group('[E9] 반영비율 덮어쓰기(override)');
+{
+  const me = student(95);
+  const key = 'sog·경영학부';
+  const base = find(analyze(me, DEF_TH), '서강대', '경영학부');
+  const flat = find(analyze(me, DEF_TH, { [key]: [25, 25, 25, 25] }), '서강대', '경영학부');
+  ok('override가 환산점수를 실제로 바꿈', Math.abs(base.score - flat.score) > 0.5,
+    `${base.score.toFixed(1)} → ${flat.score.toFixed(1)}`);
+  ok('override는 해당 학과에만 적용',
+    find(analyze(me, DEF_TH, { [key]: [25, 25, 25, 25] }), '서강대', '경제학부').score ===
+    find(analyze(me, DEF_TH), '서강대', '경제학부').score);
+}
+
+group('[E10] 결측 입력 방어');
+{
+  const empty = { kor: { std: 0, pct: 0 }, math: { std: 0, pct: 0, sel: '확률과통계' },
+    eng: { grade: 3 }, tam: [{ std: 0, pct: 0 }, { std: 0, pct: 0 }], tamType: '사탐' };
+  let threw = false, r = [];
+  try { r = analyze(empty, DEF_TH); } catch (e) { threw = true; }
+  ok('성적이 비어도 예외 없이 계산', !threw);
+  ok('NaN이 섞이지 않음', r.every(x => Number.isFinite(x.score) && Number.isFinite(x.diff)));
+  ok('모든 학과가 다섯 단계 중 하나로 분류', r.every(x => TIER_ORDER.includes(x.tier)));
+}
+
+done();

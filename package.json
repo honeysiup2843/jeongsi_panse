@@ -1,0 +1,11 @@
+{
+  "name": "jeongsi-panse",
+  "version": "1.0.0",
+  "description": "수능 성적을 대학별 반영비율로 재계산해 위험·상향·소신·적정·하향 5단계로 분류하는 정시 지원 분석기",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build.js",
+    "test": "node tests/data.test.js && node tests/engine.test.js",
+    "check": "npm test && npm run build"
+  }
+}
