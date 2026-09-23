@@ -155,4 +155,27 @@ group('[E10] 결측 입력 방어');
   ok('모든 학과가 다섯 단계 중 하나로 분류', r.every(x => TIER_ORDER.includes(x.tier)));
 }
 
+group('[E11] 회귀: 반영비율 추정인 학과의 추정 표시 누락');
+{
+  const r = analyze(student(95), DEF_TH);
+  const miss = r.filter(x => x.prof.conf === 'e' && x.conf !== 'e');
+  ok('반영비율 프로필이 추정이면 학과도 추정으로 표시', miss.length === 0,
+    miss.slice(0, 3).map(x => `${x.u} ${x.d}`).join(' / '));
+  ok('합격선·반영비율 출처가 각각 노출됨',
+    r.every(x => x.cutConf === x.conf || x.ratioConf === x.conf) &&
+    r.every(x => ['c', 'e'].includes(x.cutConf) && ['c', 'e'].includes(x.ratioConf)));
+  info(`둘 다 확인 ${r.filter(x => x.conf === 'c').length}개 / ${r.length}개`);
+}
+
+group('[E12] 회귀: 탐구 한 과목만 입력 시 점수 반토막');
+{
+  const both = student(95);
+  const one = student(95, { tam: [both.tam[0], { std: 0, pct: 0 }] });
+  const rb = analyze(both, DEF_TH), ro = analyze(one, DEF_TH);
+  ok('빈 탐구 과목은 평균에서 제외 (두 과목 같은 점수와 결과 동일)',
+    rb.every((x, i) => Math.abs(x.diff - ro[i].diff) < 1e-9));
+  const cal = calibrate(one);
+  ok('빈 과목 때문에 탐구 보정값이 튀지 않음', Math.abs(cal.tam) < 3, `탐 ${cal.tam.toFixed(1)}`);
+}
+
 done();

@@ -13,7 +13,7 @@ const NAMES = [
   'PROFILES', 'UNIVS',
   'STD_MAX', 'ANCHOR', 'GRADE_CUT',
   'pctToStd', 'stdToPct', 'pctToGrade', 'clamp', 'normStd',
-  'calibrate', 'pctToStdCal', 'normalizeVals', 'calcScore',
+  'avgOf', 'tamAvg', 'calibrate', 'pctToStdCal', 'normalizeVals', 'calcScore',
   'meVals', 'cutVals', 'DEF_TH', 'TIER_ORDER', 'TIER_VAR', 'TIER_DESC',
   'tierOf', 'prob', 'analyze'
 ];
