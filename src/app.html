@@ -513,13 +513,14 @@ function render(){
   const me = meObj();
   RESULT = analyze(me, TH, OV);
 
-  const avg = (me.kor.pct + me.math.pct + (me.tam[0].pct + me.tam[1].pct)/2)/3;
+  const avg = (me.kor.pct + me.math.pct + tamAvg(me.tam).pct)/3;
   $('#sAvg').innerHTML = avg ? avg.toFixed(1) + '<small>%</small>' : '–';
   // 누적 백분위 근사: 세 영역 평균 백분위의 상위 비율
   $('#sRank').innerHTML = avg ? '상위 ' + Math.max(0.1, (100-avg)).toFixed(1) + '<small>%</small>' : '–';
   const cal = calibrate(me);
   $('#calInfo').textContent = '대응표 보정 국' + (cal.kor>=0?'+':'') + cal.kor.toFixed(0) +
-    ' 수' + (cal.math>=0?'+':'') + cal.math.toFixed(0) + ' 탐' + (cal.tam>=0?'+':'') + cal.tam.toFixed(0);
+    ' 수' + (cal.math>=0?'+':'') + cal.math.toFixed(0) + ' 탐' + (cal.tam>=0?'+':'') + cal.tam.toFixed(0) +
+    (me.tam.filter(t=>t.std>0 || t.pct>0).length===1 ? ' · 탐구 1과목만으로 계산' : '');
 
   // 분포
   const cnt = {}; TIER_ORDER.forEach(t=>cnt[t]=0);
@@ -630,7 +631,7 @@ function openSheet(key){
         <h3>${esc(r.u)} ${esc(r.d)}</h3>
         <div class="sub"><span class="mg">${r.mg}군</span>${r.g}계열 · ${esc(r.region)} ·
           ${p.base==='std'?'표준점수 반영':'백분위 반영'}
-          ${r.conf==='e'?'<span class="est">반영비율·합격선 추정치</span>':''}</div>
+          ${r.conf==='e'?'<span class="est">'+[r.ratioConf==='e'?'반영비율':'', r.cutConf==='e'?'합격선':''].filter(Boolean).join('·')+' 추정치</span>':''}</div>
       </div>
       <button class="btn" type="button" id="closeX" aria-label="닫기">닫기</button>
     </header>

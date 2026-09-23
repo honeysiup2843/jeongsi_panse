@@ -28,10 +28,19 @@ const pctToGrade = p => { for(let i=0;i<9;i++) if(p>=GRADE_CUT[i]) return i+1; r
 const clamp = v => Math.max(0, Math.min(100, v));
 const normStd = (s,a) => clamp(s / STD_MAX[a] * 100);
 
+// 탐구 두 과목 평균 — 비어 있는(0) 과목은 빼고 입력된 과목만 평균한다.
+// 빈 과목을 0점으로 평균하면 탐구 점수가 반토막 나고 보정값이 한계까지 밀린다. [E12]
+const avgOf = xs => { const v = xs.filter(x => x > 0); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : 0; };
+function tamAvg(tam){
+  const both = tam.filter(t => t.std > 0 && t.pct > 0); // 보정용: 표준·백분위가 둘 다 있는 과목만
+  return { std: avgOf(tam.map(t => t.std)), pct: avgOf(tam.map(t => t.pct)),
+    calStd: avgOf(both.map(t => t.std)), calPct: avgOf(both.map(t => t.pct)) };
+}
+
 function calibrate(me){
-  const cal = {};
+  const cal = {}, t = tamAvg(me.tam);
   const pairs = { kor:[me.kor.std, me.kor.pct], math:[me.math.std, me.math.pct],
-    tam:[(me.tam[0].std+me.tam[1].std)/2, (me.tam[0].pct+me.tam[1].pct)/2] };
+    tam:[t.calStd, t.calPct] };
   for(const a of ['kor','math','tam']){
     const [s,p] = pairs[a];
     cal[a] = (s && p) ? Math.max(-15, Math.min(15, s - pctToStd(p,a))) : 0;
@@ -57,10 +66,10 @@ function calcScore(prof, v, o){
   const caps = {kor:r[0]*10, math:r[1]*10, tam:r[3]*10, eng: prof.engMode==='ratio'? r[2]*10 : 0};
   return {total: parts.kor+parts.math+parts.tam+parts.eng, parts, caps};
 }
-const meVals = me => ({
+const meVals = me => { const t = tamAvg(me.tam); return {
   kor:{std:me.kor.std, pct:me.kor.pct}, math:{std:me.math.std, pct:me.math.pct},
-  tam:{std:(me.tam[0].std+me.tam[1].std)/2, pct:(me.tam[0].pct+me.tam[1].pct)/2}
-});
+  tam:{std:t.std, pct:t.pct}
+}; };
 const cutVals = (c,cal) => ({
   kor:{std:pctToStdCal(c,'kor',cal), pct:c}, math:{std:pctToStdCal(c,'math',cal), pct:c},
   tam:{std:pctToStdCal(c,'tam',cal), pct:c}
@@ -91,7 +100,8 @@ function analyze(me, th, overrides){
     const cs = calcScore(prof, normalizeVals(cutVals(d.cut, cal), prof.base), {engGrade:1, applyBonus:false});
     const diff = (my.total - cs.total)/10;
     out.push({key, uid:u.id, u:u.name, region:u.region, d:d.n, g:d.g, mg:d.mg, cutP:d.cut,
-      conf:d.conf, prof, score:my.total, parts:my.parts, caps:my.caps,
+      // conf: 합격선·반영비율 중 하나라도 추정이면 'e' (UI 추정 배지 기준) [E11]
+      conf:(d.conf==='e' || prof.conf==='e') ? 'e' : 'c', cutConf:d.conf, ratioConf:prof.conf, prof, score:my.total, parts:my.parts, caps:my.caps,
       cutTotal:cs.total, cutParts:cs.parts, diff, tier:tierOf(diff,th), p:prob(diff)});
   }
   return out;
