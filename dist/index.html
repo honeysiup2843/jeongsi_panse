@@ -121,10 +121,8 @@ button, select, input{font:inherit; color:inherit}
 .num::-webkit-outer-spin-button,.num::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .num:hover{background:var(--glass-2)}
 .num:disabled{opacity:.45; cursor:not-allowed; background:transparent}
-.num.derived{color:var(--ink-3); font-style:italic}
 .sel{background:var(--glass-3); border:1px solid var(--line); border-radius:9px; padding:6px 7px; font-size:12px; max-width:118px; min-width:0}
 .gt td:first-child{width:1%}
-.hintrow{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:14px; font-size:12px; color:var(--ink-3)}
 
 /* 요약 */
 .stats{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px}
@@ -328,10 +326,6 @@ footer .warn{margin-top:14px; padding:12px 14px; border-radius:12px; font-size:1
       </tr></thead>
       <tbody id="gradeBody"></tbody>
     </table>
-    <div class="hintrow">
-      <button class="btn" id="fillBtn" type="button">빈칸 자동 추정</button>
-      <span>하나만 입력해도 나머지를 수능 표준↔백분위 대응 곡선으로 채웁니다. 추정값은 <i>기울임</i>으로 표시됩니다.</span>
-    </div>
   </section>
 
   <!-- 요약 + 경계 설정 -->
@@ -2253,6 +2247,18 @@ const pctToGrade = p => { for(let i=0;i<9;i++) if(p>=GRADE_CUT[i]) return i+1; r
 const clamp = v => Math.max(0, Math.min(100, v));
 const normStd = (s,a) => clamp(s / STD_MAX[a] * 100);
 
+// 표준점수·백분위 중 한쪽만 입력된 영역은 대응 곡선으로 빈 쪽을 채운다. [E15]
+// 채우지 않으면 백분위만 넣은 학생은 표준점수 반영 대학에서 그 영역이 0점이 된다.
+function fillPair(o, a){
+  const std = o.std > 0 ? o.std : (o.pct > 0 ? Math.round(pctToStd(o.pct, a)) : 0);
+  const pct = o.pct > 0 ? o.pct : (o.std > 0 ? stdToPct(o.std, a) : 0);
+  return Object.assign({}, o, {std, pct});
+}
+const completeScores = me => Object.assign({}, me, {
+  kor: fillPair(me.kor, 'kor'), math: fillPair(me.math, 'math'),
+  tam: me.tam.map(t => fillPair(t, 'tam'))
+});
+
 // 탐구 두 과목 평균 — 비어 있는(0) 과목은 빼고 입력된 과목만 평균한다.
 // 빈 과목을 0점으로 평균하면 탐구 점수가 반토막 나고 보정값이 한계까지 밀린다. [E12]
 const avgOf = xs => { const v = xs.filter(x => x > 0); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : 0; };
@@ -2338,6 +2344,7 @@ function cutOf(d, mode){
 }
 
 function analyze(me, th, overrides, cutMode){
+  me = completeScores(me);
   const mv = meVals(me), cal = calibrate(me), out = [];
   for(const u of UNIVS) for(const d of u.depts){
     const key = u.id + '·' + d.n;
@@ -2368,11 +2375,11 @@ const AREAS = [
 ];
 const SCI = ['생명과학Ⅰ','지구과학Ⅰ','물리학Ⅰ','화학Ⅰ','생명과학Ⅱ','지구과학Ⅱ','물리학Ⅱ','화학Ⅱ'];
 const EXAMPLE = {
-  kor:{std:129, pct:95, grade:1, sel:'언어와매체', auto:{}},
-  math:{std:130, pct:96, grade:1, sel:'미적분', auto:{}},
+  kor:{std:129, pct:95, grade:1, sel:'언어와매체'},
+  math:{std:130, pct:96, grade:1, sel:'미적분'},
   eng:{grade:2},
-  tam1:{std:66, pct:96, grade:1, sel:'생명과학Ⅰ', auto:{}},
-  tam2:{std:64, pct:94, grade:2, sel:'지구과학Ⅰ', auto:{}}
+  tam1:{std:66, pct:96, grade:1, sel:'생명과학Ⅰ'},
+  tam2:{std:64, pct:94, grade:2, sel:'지구과학Ⅰ'}
 };
 let S = load() || JSON.parse(JSON.stringify(EXAMPLE));
 let TH = loadTH() || Object.assign({}, DEF_TH);
@@ -2423,7 +2430,6 @@ function syncInputs(){
   document.querySelectorAll('#gradeBody .num').forEach(el=>{
     const v = S[el.dataset.k][el.dataset.t];
     el.value = (v===null||v===undefined||v==='') ? '' : v;
-    el.classList.toggle('derived', !!(S[el.dataset.k].auto && S[el.dataset.k].auto[el.dataset.t]));
   });
 }
 function onGradeInput(e){
@@ -2433,20 +2439,8 @@ function onGradeInput(e){
   else {
     const v = el.value === '' ? null : Number(el.value);
     S[k][t] = v;
-    if(S[k].auto) S[k].auto[t] = false;
-    el.classList.remove('derived');
   }
   save(); render();
-}
-function autofill(){
-  for(const a of AREAS){
-    if(a.k==='eng'){ if(!S.eng.grade) S.eng.grade = 3; continue; }
-    const o = S[a.k]; o.auto = o.auto || {};
-    if(o.std && !o.pct){ o.pct = stdToPct(o.std, a.area); o.auto.pct = true; }
-    else if(o.pct && !o.std){ o.std = Math.round(pctToStd(o.pct, a.area)); o.auto.std = true; }
-    if(o.pct && !o.grade){ o.grade = pctToGrade(o.pct); o.auto.grade = true; }
-  }
-  save(); syncInputs(); render();
 }
 
 /* ══════════ 경계 슬라이더 ══════════ */
@@ -2483,7 +2477,7 @@ function meObj(){
   };
 }
 function render(){
-  const me = meObj();
+  const me = completeScores(meObj()); // 표준·백분위 중 빈 쪽은 대응 곡선으로 채워 계산 [E15]
   RESULT = analyze(me, TH, OV, CM);
   document.querySelectorAll('.nDepts').forEach(el=>el.textContent = RESULT.length + '개');
   document.querySelectorAll('[data-cm]').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.cm===CM)));
@@ -2709,7 +2703,6 @@ document.querySelectorAll('.seg button[data-f]').forEach(b=>{
 $('#q').addEventListener('input', e=>{ F.q = e.target.value; render(); });
 $('#near').addEventListener('change', e=>{ F.near = e.target.checked; render(); });
 document.querySelectorAll('[data-cm]').forEach(b=>b.addEventListener('click', ()=>{ CM = b.dataset.cm; saveCM(); render(); }));
-$('#fillBtn').addEventListener('click', autofill);
 $('#thReset').addEventListener('click', ()=>{
   TH = Object.assign({}, DEF_TH); saveTH();
   ['하향','적정','소신','상향'].forEach(x=>{ $('#th-'+x).value = TH[x]; $('#tho-'+x).textContent = sgn(TH[x])+'%p'; });

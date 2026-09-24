@@ -223,4 +223,20 @@ group('[E14] 회귀: 합격선 수험생을 영어 1등급으로 가정하던 �
   ok('평균 모드도 실측 영어 등급 사용', avg.every((x, i) => x.cutEng === r[i].cutEng));
 }
 
+
+group('[E15] 회귀: 표준점수·백분위 중 하나만 입력하면 빈 쪽이 0점 처리');
+{
+  // 「빈칸 자동 추정」 버튼을 없애면서, 빈 쪽을 엔진이 대응 곡선으로 채운다.
+  // 채우지 않으면 백분위만 넣은 학생은 표준점수 반영 대학에서 그 영역이 0점이 된다.
+  const full = student(95);
+  const pctOnly = { ...full, kor: { std: 0, pct: 95 }, math: { std: 0, pct: 95, sel: '미적분' },
+    tam: [{ std: 0, pct: 95 }, { std: 0, pct: 95 }] };
+  const stdOnly = { ...full, kor: { std: full.kor.std, pct: 0 }, math: { std: full.math.std, pct: 0, sel: '미적분' },
+    tam: [{ std: full.tam[0].std, pct: 0 }, { std: full.tam[1].std, pct: 0 }] };
+  const rf = analyze(full, DEF_TH), rp = analyze(pctOnly, DEF_TH), rs = analyze(stdOnly, DEF_TH);
+  const gap = (a, b) => Math.max(...a.map((x, i) => Math.abs(x.diff - b[i].diff)));
+  ok('백분위만 입력해도 둘 다 입력한 것과 격차 차이 0.5%p 이내', gap(rf, rp) < 0.5, `최대 ${gap(rf, rp).toFixed(2)}%p`);
+  ok('표준점수만 입력해도 둘 다 입력한 것과 격차 차이 0.5%p 이내', gap(rf, rs) < 0.5, `최대 ${gap(rf, rs).toFixed(2)}%p`);
+}
+
 done();
