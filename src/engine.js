@@ -90,18 +90,32 @@ function tierOf(d,th){
 }
 const prob = d => Math.round(100/(1+Math.exp(-d/1.0)));
 
-function analyze(me, th, overrides){
+// 합격선 기준 — 'latest': 최신 학년도 / 'avg': 결과가 있는 학년도(2023~2026) 평균
+const CUT_MODES = {latest:'최신 학년도', avg:'학년도 평균'};
+function cutOf(d, mode){
+  const ys = d.cuts ? Object.keys(d.cuts).sort() : [];
+  if(mode==='avg' && ys.length){
+    const v = Math.round(ys.reduce((a,y)=>a+d.cuts[y],0)/ys.length*10)/10;
+    const conf = ys.some(y=>d.cconf && d.cconf[y]==='e') ? 'e' : 'c';
+    return {v, conf, label: ys.length>1 ? ys[0]+'~'+ys[ys.length-1]+'학년도 평균' : ys[0]+'학년도'};
+  }
+  return {v:d.cut, conf:d.conf, label:(d.cy ? d.cy+'학년도' : '최근')};
+}
+
+function analyze(me, th, overrides, cutMode){
   const mv = meVals(me), cal = calibrate(me), out = [];
   for(const u of UNIVS) for(const d of u.depts){
     const key = u.id + '·' + d.n;
     const prof = (overrides && overrides[key]) ? Object.assign({}, PROFILES[d.p], {ratio: overrides[key]}) : PROFILES[d.p];
     const my = calcScore(prof, normalizeVals(mv, prof.base),
       {engGrade:me.eng.grade, applyBonus:true, mathSel:me.math.sel, tamType:me.tamType});
-    const cs = calcScore(prof, normalizeVals(cutVals(d.cut, cal), prof.base), {engGrade:1, applyBonus:false});
+    const c = cutOf(d, cutMode);
+    const cs = calcScore(prof, normalizeVals(cutVals(c.v, cal), prof.base), {engGrade:1, applyBonus:false});
     const diff = (my.total - cs.total)/10;
-    out.push({key, uid:u.id, u:u.name, region:u.region, d:d.n, g:d.g, mg:d.mg, cutP:d.cut,
+    out.push({key, uid:u.id, u:u.name, region:u.region, d:d.n, g:d.g, mg:d.mg, cutP:c.v, cutLabel:c.label,
+      cuts:d.cuts||null, cconf:d.cconf||null, eng70:d.eng||null, rate:d.rate, final:d.final,
       // conf: 합격선·반영비율 중 하나라도 추정이면 'e' (UI 추정 배지 기준) [E11]
-      conf:(d.conf==='e' || prof.conf==='e') ? 'e' : 'c', cutConf:d.conf, ratioConf:prof.conf, prof, score:my.total, parts:my.parts, caps:my.caps,
+      conf:(c.conf==='e' || prof.conf==='e') ? 'e' : 'c', cutConf:c.conf, ratioConf:prof.conf, prof, score:my.total, parts:my.parts, caps:my.caps,
       cutTotal:cs.total, cutParts:cs.parts, diff, tier:tierOf(diff,th), p:prob(diff)});
   }
   return out;

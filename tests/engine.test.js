@@ -1,7 +1,7 @@
 /* 엔진 검증 — 과거에 실제로 터졌던 두 버그(E2 포화, E8 잣대 불일치)를 회귀 테스트로 고정 */
 const E = require('./_load');
 const { group, ok, info, done } = require('./harness');
-const { STD_MAX, pctToStd, stdToPct, calibrate, tierOf, prob, analyze, DEF_TH, TIER_ORDER } = E;
+const { STD_MAX, pctToStd, stdToPct, calibrate, tierOf, prob, analyze, cutOf, DEF_TH, TIER_ORDER } = E;
 
 const student = (p, over) => Object.assign({
   kor:  { std: Math.round(pctToStd(p, 'kor')),  pct: p },
@@ -12,7 +12,8 @@ const student = (p, over) => Object.assign({
 }, over);
 
 const dist = r => r.reduce((a, x) => (a[x.tier] = (a[x.tier] || 0) + 1, a), {});
-const find = (r, u, d) => r.find(x => x.u === u && x.d === d);
+// 모집단위명은 「어디가」 표기(예: '경영학부(경영학전공)')라 접두어로 찾는다
+const find = (r, u, d) => r.find(x => x.u === u && x.d === d) || r.find(x => x.u === u && x.d.startsWith(d));
 
 group('[E1] 표준↔백분위 대응표');
 {
@@ -34,10 +35,13 @@ group('[E2] 회귀: 상위권 커트 포화 (정규분포 근사 시절 버그)'
     `${Math.min(...r.map(x => x.score)).toFixed(1)} ~ ${Math.max(...r.map(x => x.score)).toFixed(1)}`);
   ok('합격선 환산총점이 1000에 붙지 않음', Math.max(...r.map(x => x.cutTotal)) < 995,
     `최대 ${Math.max(...r.map(x => x.cutTotal)).toFixed(1)}`);
+  // 「어디가」 합격선은 정수라 (합격선, 프로필)이 같은 학과는 커트가 같은 게 정상이다.
+  // 포화 버그는 '서로 다른 입력이 같은 커트로 뭉개지는' 것 → 입력 조합 수와 커트 고유값 수를 비교한다.
   const top = r.filter(x => x.cutP >= 98);
+  const inputs = new Set(top.map(x => x.cutP + '|' + JSON.stringify(x.prof))).size;
   const uniq = new Set(top.map(x => x.cutTotal.toFixed(1))).size;
-  ok('백분위 98 이상 학과들의 커트가 서로 구분됨', uniq >= top.length * 0.5,
-    `${top.length}개 중 고유값 ${uniq}개`);
+  ok('백분위 98 이상 학과들의 커트가 서로 구분됨', uniq >= inputs * 0.9,
+    `입력 조합 ${inputs}개 → 커트 고유값 ${uniq}개`);
 }
 
 group('[E3] 단조성');
@@ -97,10 +101,14 @@ group('[E6] 회귀: 표준점수형 vs 백분위형 잣대 불일치 (대응표 
   const asStd = run('std'), asPct = run('pct');
   for (const k in E.PROFILES) E.PROFILES[k].base = snap[k];
 
-  const gaps = asStd.map((x, i) => Math.abs(x.diff - asPct[i].diff));
+  // 판정이 갈리는 관심권(격차 ±6%p)에서 본다. 합격선이 수험생보다 한참 낮은 학과(예: 백분위 70대)는
+  // 표준점수·백분위 척도 차이로 격차가 벌어지지만 두 방식 모두 '하향'이라 판정에 영향이 없다.
+  // (보정을 끄면 이 값이 약 5%p로 뛴다 — 회귀 감지력 확인함)
+  const near = asStd.map((x, i) => [x, asPct[i]]).filter(([a, b]) => Math.abs(a.diff) <= 6 || Math.abs(b.diff) <= 6);
+  const gaps = near.map(([a, b]) => Math.abs(a.diff - b.diff));
   const avg = gaps.reduce((a, b) => a + b, 0) / gaps.length;
   const match = asStd.filter((x, i) => x.tier === asPct[i].tier).length / asStd.length;
-  ok('같은 학과를 두 방식으로 계산한 격차가 평균 1.0%p 미만', avg < 1.0, `평균 ${avg.toFixed(2)}%p`);
+  ok('같은 학과를 두 방식으로 계산한 격차가 평균 1.0%p 미만 (관심권)', avg < 1.0, `${near.length}개 학과 평균 ${avg.toFixed(2)}%p`);
   ok('두 방식의 5단계 판정 일치율 80% 이상', match >= 0.8, `${(match * 100).toFixed(0)}%`);
 }
 
@@ -134,14 +142,14 @@ group('[E8] 성적대별 분포가 합리적으로 이동');
 group('[E9] 반영비율 덮어쓰기(override)');
 {
   const me = student(95);
-  const key = 'sog·경영학부';
   const base = find(analyze(me, DEF_TH), '서강대', '경영학부');
+  const key = base.key;
   const flat = find(analyze(me, DEF_TH, { [key]: [25, 25, 25, 25] }), '서강대', '경영학부');
   ok('override가 환산점수를 실제로 바꿈', Math.abs(base.score - flat.score) > 0.5,
     `${base.score.toFixed(1)} → ${flat.score.toFixed(1)}`);
   ok('override는 해당 학과에만 적용',
-    find(analyze(me, DEF_TH, { [key]: [25, 25, 25, 25] }), '서강대', '경제학부').score ===
-    find(analyze(me, DEF_TH), '서강대', '경제학부').score);
+    find(analyze(me, DEF_TH, { [key]: [25, 25, 25, 25] }), '서강대', '경제학').score ===
+    find(analyze(me, DEF_TH), '서강대', '경제학').score);
 }
 
 group('[E10] 결측 입력 방어');
@@ -176,6 +184,24 @@ group('[E12] 회귀: 탐구 한 과목만 입력 시 점수 반토막');
     rb.every((x, i) => Math.abs(x.diff - ro[i].diff) < 1e-9));
   const cal = calibrate(one);
   ok('빈 과목 때문에 탐구 보정값이 튀지 않음', Math.abs(cal.tam) < 3, `탐 ${cal.tam.toFixed(1)}`);
+}
+
+group('[E13] 합격선 기준 (최신 학년도 / 학년도 평균)');
+{
+  const me = student(95);
+  const latest = analyze(me, DEF_TH), avg = analyze(me, DEF_TH, null, 'avg');
+  const i = latest.findIndex(x => x.cuts && Object.keys(x.cuts).length >= 3 &&
+    new Set(Object.values(x.cuts)).size > 1);
+  const x = latest[i], ys = Object.keys(x.cuts);
+  const mean = ys.reduce((a, y) => a + x.cuts[y], 0) / ys.length;
+  ok('기본값은 최신 학년도 합격선', latest.every(r => r.cutP === (r.cuts ? r.cuts[Math.max(...Object.keys(r.cuts))] : r.cutP)));
+  ok('평균 모드는 학년도 평균을 합격선으로 씀', Math.abs(avg[i].cutP - mean) < 0.051,
+    `${x.u} ${x.d}: ${ys.map(y => x.cuts[y]).join('/')} → ${avg[i].cutP}`);
+  ok('합격선이 높아지면 격차는 줄어듦 (평균 모드도 단조)',
+    latest.every((r, k) => Math.sign(avg[k].cutP - r.cutP) * (avg[k].diff - r.diff) <= 1e-9));
+  ok('한 해라도 계산값(e)이 섞인 평균은 추정으로 표시',
+    avg.every(r => !r.cconf || !Object.values(r.cconf).includes('e') || r.cutConf === 'e'));
+  ok('알 수 없는 모드는 최신 학년도로 처리', cutOf({ cut: 90, cy: 2026, conf: 'c' }, 'zzz').v === 90);
 }
 
 done();

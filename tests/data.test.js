@@ -61,10 +61,32 @@ group('[D3] 대학·학과');
   info(`모집군 분포 ${JSON.stringify(mg)}`);
 }
 
+group('[D5] 학년도별 합격선 (「어디가」 원자료)');
+{
+  const bad = [];
+  for (const u of UNIVS) for (const d of u.depts) {
+    const tag = `${u.name} ${d.n}`;
+    if (!d.cuts) { bad.push(`${tag}: cuts 없음`); continue; }
+    const ys = Object.keys(d.cuts).map(Number);
+    if (!ys.length || ys.some(y => y < 2023 || y > 2026)) bad.push(`${tag}: 학년도 ${ys}`);
+    if (d.cy !== Math.max(...ys)) bad.push(`${tag}: cy ${d.cy} ≠ 최신 ${Math.max(...ys)}`);
+    if (d.cut !== d.cuts[d.cy]) bad.push(`${tag}: cut ${d.cut} ≠ cuts[${d.cy}]`);
+    if (d.conf !== d.cconf[d.cy]) bad.push(`${tag}: conf ≠ cconf[${d.cy}]`);
+    if (Object.values(d.cuts).some(v => !(v > 0 && v <= 100))) bad.push(`${tag}: 범위 밖 합격선`);
+    if (Object.values(d.eng || {}).some(g => !(g >= 1 && g <= 9))) bad.push(`${tag}: 영어등급`);
+  }
+  ok('cut = 최신 학년도 값이고 모든 연도 값이 0~100', bad.length === 0, bad.slice(0, 3).join(' / '));
+  const byYear = {};
+  for (const u of UNIVS) for (const d of u.depts) for (const y in d.cuts) byYear[y] = (byYear[y] || 0) + 1;
+  info(`학년도별 합격선 수 ${JSON.stringify(byYear)}`);
+}
+
 group('[D4] 합격선 상식 검증');
 {
   const med = UNIVS.flatMap(u => u.depts.filter(d => d.g === '의약').map(d => d.cut));
-  ok('의약계열 합격선은 모두 백분위 95 이상', Math.min(...med) >= 95, `최저 ${Math.min(...med)}`);
+  // 「어디가」 2026학년도 실측으로 의약계열 70% 컷 최저는 94(충남대 의예과 등).
+  // 90 미만이면 계열 분류 오류(예: '식물의학과'가 의약으로 잡힘)를 의심한다.
+  ok('의약계열 합격선은 모두 백분위 90 이상', Math.min(...med) >= 90, `최저 ${Math.min(...med)}`);
   const snu = UNIVS.find(u => u.id === 'snu').depts.map(d => d.cut);
   const kwu = UNIVS.find(u => u.id === 'kwu').depts.filter(d => d.g !== '의약').map(d => d.cut);
   ok('서울대 최저 합격선 > 지방국립대 일반학과 최고 합격선',

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* src/{data.js, engine.js, app.html} → dist/index.html (단일 파일)
+/* src/{data.js, univs.js, engine.js, app.html} → dist/index.html (단일 파일)
    Artifact 게시본은 <!doctype>/<html>/<head>/<body> 없이 본문만 담는다. */
 const fs = require('fs');
 const path = require('path');
@@ -7,7 +7,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 
-const data = read('src/data.js');
+const data = read('src/data.js') + '\n' + read('src/univs.js');
 const engine = read('src/engine.js');
 let html = read('src/app.html');
 

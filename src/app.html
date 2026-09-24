@@ -154,6 +154,8 @@ input[type=range]{width:100%; accent-color:var(--accent); height:20px}
 .seg button{background:none; border:none; border-radius:8px; padding:5px 11px; cursor:pointer;
   font-size:12.5px; font-weight:500; color:var(--ink-2)}
 .seg button[aria-pressed=true]{background:var(--accent); color:#fff; font-weight:600}
+.seg.sm{padding:2px}
+.seg.sm button{padding:2px 8px; font-size:11px}
 .search{flex:1 1 160px; min-width:130px; background:var(--glass-3); border:1px solid var(--line);
   border-radius:11px; padding:7px 12px; font-size:13px}
 .chk{display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink-2); cursor:pointer; white-space:nowrap}
@@ -257,6 +259,13 @@ dialog::backdrop{background:rgba(6,9,20,.55); -webkit-backdrop-filter:blur(6px);
 .scaleax{display:flex; justify-content:space-between; font-size:10.5px; color:var(--ink-3);
   font-family:"IBM Plex Mono",monospace; margin-top:2px}
 
+.yrs{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px}
+.yr{padding:8px 6px; border-radius:10px; background:var(--glass-3); border:1px solid var(--line-2); text-align:center; display:flex; flex-direction:column; gap:1px}
+.yr .y{font-size:10.5px; color:var(--ink-3); font-family:"IBM Plex Mono",monospace}
+.yr b{font-family:"IBM Plex Mono",monospace; font-size:17px; font-weight:600; font-variant-numeric:tabular-nums}
+.yr b.derived{font-style:italic; color:var(--ink-2)}
+.yr .e{font-size:10.5px; color:var(--ink-3)}
+.yr.none{opacity:.5}
 .editgrid{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px}
 .editgrid label{font-size:11px; color:var(--ink-3); display:block; margin-bottom:3px}
 .sumline{font-size:11.5px; margin-top:8px; color:var(--ink-3); font-family:"IBM Plex Mono",monospace}
@@ -290,7 +299,7 @@ footer .warn{margin-top:14px; padding:12px 14px; border-radius:12px; font-size:1
     <p class="eyebrow">수능 성적 기반 정시 지원 분석</p>
     <h1 class="brandmark">정시 지원 <em>판세도</em></h1>
     <p class="tagline">대학·학과마다 다른 <b>영역별 반영비율</b>과 <b>영어 환산방식</b>을 적용해 내 환산점수를 다시 계산하고,
-      최근 합격선과의 격차로 199개 학과를 위험·상향·소신·적정·하향 다섯 칸에 배치합니다.</p>
+      최근 합격선과의 격차로 <span class="nDepts">전체</span> 학과를 위험·상향·소신·적정·하향 다섯 칸에 배치합니다.</p>
   </div>
   <div class="hbtns">
     <button class="btn" id="themeBtn" type="button">테마</button>
@@ -333,7 +342,10 @@ footer .warn{margin-top:14px; padding:12px 14px; border-radius:12px; font-size:1
       <div class="stat"><div class="k">추정 누적 백분위</div><div class="v" id="sRank">–</div></div>
     </div>
     <div style="margin-top:14px">
-      <div class="k eyebrow" style="margin-bottom:5px">5단계 분포 · 전체 199개 학과</div>
+      <div class="sec-h" style="margin:0 0 5px">
+        <div class="k eyebrow">5단계 분포 · 전체 <span class="nDepts"></span> 학과</div>
+        <div class="seg sm" role="group" aria-label="합격선 기준"><button type="button" data-cm="latest" aria-pressed="true">최신 학년도</button><button type="button" data-cm="avg" aria-pressed="false">학년도 평균</button></div>
+      </div>
       <div class="distbar" id="distBar"></div>
       <div class="distlegend" id="distLeg"></div>
     </div>
@@ -375,7 +387,8 @@ footer .warn{margin-top:14px; padding:12px 14px; border-radius:12px; font-size:1
       <li><b>5단계</b> — 격차를 경계값으로 나눕니다(위 슬라이더로 조절). 합격확률은 격차를 로지스틱 곡선에 넣은 <i>참고용</i> 수치로, 실제 경쟁률·이월·군별 연쇄이동은 반영하지 않습니다.</li>
     </ol>
     <div class="warn"><b>이 도구는 진학 상담을 대체하지 않습니다.</b> 합격선은 연도별 변동이 크고, 표본 수가 적은 학과일수록 오차가 큽니다. 판단의 출발점으로만 쓰고, 최종 결정은 모집요강과 담당 선생님·입학처 상담으로 확정하세요.</div>
-    <p class="srcs">반영비율·영어 환산·합격선 참고: 에듀진, 지역내일, 스쿨맵 등 공개 보도자료 (2025~2026학년도 기준).</p>
+    <p class="srcs">합격선: 대교협 대입정보포털 「어디가」 2023~2026학년도 정시 일반전형 결과(최종등록자 70% 컷 국·수·탐 평균백분위).
+      반영비율·영어 환산: 에듀진, 지역내일, 스쿨맵 등 공개 보도자료 — 상당수가 추정치입니다.</p>
   </div>
 </footer>
 </div>
@@ -409,6 +422,7 @@ let TH = loadTH() || Object.assign({}, DEF_TH);
 let OV = loadOV() || {};
 let PICKS = loadPicks() || {};
 let F = {g:'전체', mg:'전체', q:'', near:true};
+let CM = loadCM() || 'latest'; // 합격선 기준 (CUT_MODES)
 let RESULT = [];
 
 function save(){ try{ localStorage.setItem('jp.scores', JSON.stringify(S)); }catch(e){} }
@@ -419,6 +433,8 @@ function saveOV(){ try{ localStorage.setItem('jp.ov', JSON.stringify(OV)); }catc
 function loadOV(){ try{ const r = localStorage.getItem('jp.ov'); return r? JSON.parse(r):null; }catch(e){ return null; } }
 function savePicks(){ try{ localStorage.setItem('jp.picks', JSON.stringify(PICKS)); }catch(e){} }
 function loadPicks(){ try{ const r = localStorage.getItem('jp.picks'); return r? JSON.parse(r):null; }catch(e){ return null; } }
+function saveCM(){ try{ localStorage.setItem('jp.cutmode', CM); }catch(e){} }
+function loadCM(){ try{ const r = localStorage.getItem('jp.cutmode'); return CUT_MODES[r] ? r : null; }catch(e){ return null; } }
 
 const $ = s => document.querySelector(s);
 const cvar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -511,7 +527,9 @@ function meObj(){
 }
 function render(){
   const me = meObj();
-  RESULT = analyze(me, TH, OV);
+  RESULT = analyze(me, TH, OV, CM);
+  document.querySelectorAll('.nDepts').forEach(el=>el.textContent = RESULT.length + '개');
+  document.querySelectorAll('[data-cm]').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.cm===CM)));
 
   const avg = (me.kor.pct + me.math.pct + tamAvg(me.tam).pct)/3;
   $('#sAvg').innerHTML = avg ? avg.toFixed(1) + '<small>%</small>' : '–';
@@ -642,9 +660,20 @@ function openSheet(key){
         <span class="txt">${TIER_DESC[r.tier]}<br>
           내 환산 <b style="font-family:'IBM Plex Mono',monospace">${r.score.toFixed(1)}</b> ·
           합격선 환산 <b style="font-family:'IBM Plex Mono',monospace">${r.cutTotal.toFixed(1)}</b>
-          (백분위 ${r.cutP} 기준) → <b style="color:var(${tv})">${sgn(r.diff)}%p</b></span>
+          (${r.cutLabel} 70% 컷 평균백분위 ${r.cutP}) → <b style="color:var(${tv})">${sgn(r.diff)}%p</b></span>
         <span class="pct" style="color:var(${tv})">${r.p}%</span>
       </div>
+
+      ${r.cuts ? `<div class="blk">
+        <h4>학년도별 합격선</h4>
+        <p class="note">대교협 「어디가」 정시 일반전형 결과 · 최종등록자 70% 컷의 국·수·탐 평균백분위.
+          <i>기울임</i>은 평균백분위 미공개로 과목별 70% 컷에서 계산한 값입니다.${r.rate ? ` 최근 경쟁률 ${r.rate}:1 · 모집 ${r.final}명.` : ''}</p>
+        <div class="yrs">${[2023,2024,2025,2026].map(y=>{
+          const v = r.cuts[y], est = r.cconf && r.cconf[y]==='e', eg = r.eng70 && r.eng70[y];
+          return `<div class="yr${v===undefined?' none':''}"><span class="y">${y}</span>
+            <b${est?' class="derived"':''}>${v===undefined?'–':v}</b>
+            <span class="e">${eg?'영어 '+eg+'등급':'&nbsp;'}</span></div>`;}).join('')}</div>
+      </div>` : ''}
 
       <div class="blk">
         <h4>컷 대비 위치</h4>
@@ -711,7 +740,7 @@ function openSheet(key){
 }
 
 /* ══════════ 이벤트 ══════════ */
-document.querySelectorAll('.seg button').forEach(b=>{
+document.querySelectorAll('.seg button[data-f]').forEach(b=>{
   b.addEventListener('click', ()=>{
     const f = b.dataset.f;
     document.querySelectorAll(`.seg button[data-f="${f}"]`).forEach(x=>x.setAttribute('aria-pressed','false'));
@@ -721,6 +750,7 @@ document.querySelectorAll('.seg button').forEach(b=>{
 });
 $('#q').addEventListener('input', e=>{ F.q = e.target.value; render(); });
 $('#near').addEventListener('change', e=>{ F.near = e.target.checked; render(); });
+document.querySelectorAll('[data-cm]').forEach(b=>b.addEventListener('click', ()=>{ CM = b.dataset.cm; saveCM(); render(); }));
 $('#fillBtn').addEventListener('click', autofill);
 $('#thReset').addEventListener('click', ()=>{
   TH = Object.assign({}, DEF_TH); saveTH();
