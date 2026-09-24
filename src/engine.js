@@ -92,6 +92,16 @@ const prob = d => Math.round(100/(1+Math.exp(-d/1.0)));
 
 // 합격선 기준 — 'latest': 최신 학년도 / 'avg': 결과가 있는 학년도(2023~2026) 평균
 const CUT_MODES = {latest:'최신 학년도', avg:'학년도 평균'};
+
+// 합격선 수험생의 영어 등급 = 「어디가」 70% 컷 수험생의 실측 등급.
+// 「어디가」는 이 값을 2026학년도에만 공개해서 두 합격선 기준 모두 가장 최근 실측값을 쓴다.
+// 실측이 없는 학과만 1등급으로 가정하고 assumed로 표시한다 (과거 전 학과 1등급 가정은 [E14] 편향).
+function cutEngOf(d){
+  const ys = d.eng ? Object.keys(d.eng).sort() : [];
+  return ys.length ? {grade:d.eng[ys[ys.length-1]], year:+ys[ys.length-1], assumed:false}
+                   : {grade:1, year:null, assumed:true};
+}
+
 function cutOf(d, mode){
   const ys = d.cuts ? Object.keys(d.cuts).sort() : [];
   if(mode==='avg' && ys.length){
@@ -109,10 +119,11 @@ function analyze(me, th, overrides, cutMode){
     const prof = (overrides && overrides[key]) ? Object.assign({}, PROFILES[d.p], {ratio: overrides[key]}) : PROFILES[d.p];
     const my = calcScore(prof, normalizeVals(mv, prof.base),
       {engGrade:me.eng.grade, applyBonus:true, mathSel:me.math.sel, tamType:me.tamType});
-    const c = cutOf(d, cutMode);
-    const cs = calcScore(prof, normalizeVals(cutVals(c.v, cal), prof.base), {engGrade:1, applyBonus:false});
+    const c = cutOf(d, cutMode), ce = cutEngOf(d);
+    const cs = calcScore(prof, normalizeVals(cutVals(c.v, cal), prof.base), {engGrade:ce.grade, applyBonus:false});
     const diff = (my.total - cs.total)/10;
     out.push({key, uid:u.id, u:u.name, region:u.region, d:d.n, g:d.g, mg:d.mg, cutP:c.v, cutLabel:c.label,
+      cutEng:ce.grade, cutEngYear:ce.year, cutEngAssumed:ce.assumed,
       cuts:d.cuts||null, cconf:d.cconf||null, eng70:d.eng||null, rate:d.rate, final:d.final,
       // conf: 합격선·반영비율 중 하나라도 추정이면 'e' (UI 추정 배지 기준) [E11]
       conf:(c.conf==='e' || prof.conf==='e') ? 'e' : 'c', cutConf:c.conf, ratioConf:prof.conf, prof, score:my.total, parts:my.parts, caps:my.caps,

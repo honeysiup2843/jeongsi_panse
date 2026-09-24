@@ -383,7 +383,7 @@ footer .warn{margin-top:14px; padding:12px 14px; border-radius:12px; font-size:1
       <li><b>영역 정규화</b> — 표준점수 반영 대학은 <i>취득 표준점수 ÷ 만점 표준점수</i>, 백분위 반영 대학은 <i>백분위</i>를 0~100으로 씁니다.</li>
       <li><b>대응표 보정</b> — 합격선은 백분위로 저장되어 있어 표준점수 반영 대학에서는 표준점수로 바꿔야 합니다. 이때 수능 표준↔백분위 대응 곡선을 <b>내가 입력한 성적표의 실제 대응점을 지나도록 평행이동</b>시켜, 표준점수형 대학과 백분위형 대학이 서로 다른 잣대를 쓰지 않게 했습니다.</li>
       <li><b>환산총점</b> — Σ(영역 정규화값 × 반영비율) ÷ 10 → 1000점 만점. 영어는 대학 방식대로 반영비율에 포함하거나 총점에서 가·감점합니다. 미적분/기하·과학탐구 가산점도 반영합니다.</li>
-      <li><b>격차</b> — (내 환산총점 − 합격선 환산총점) ÷ 10 = 총점 대비 <b>%p</b>. 합격선 환산총점은 국·수·탐이 모두 해당 백분위이고 영어 1등급인 가상 수험생으로 계산합니다.</li>
+      <li><b>격차</b> — (내 환산총점 − 합격선 환산총점) ÷ 10 = 총점 대비 <b>%p</b>. 합격선 환산총점은 국·수·탐이 모두 합격선 백분위이고, 영어는 「어디가」에 공개된 그 학과 70% 컷 수험생의 실제 등급인 가상 수험생으로 계산합니다(자료가 없는 학과만 1등급 가정).</li>
       <li><b>5단계</b> — 격차를 경계값으로 나눕니다(위 슬라이더로 조절). 합격확률은 격차를 로지스틱 곡선에 넣은 <i>참고용</i> 수치로, 실제 경쟁률·이월·군별 연쇄이동은 반영하지 않습니다.</li>
     </ol>
     <div class="warn"><b>이 도구는 진학 상담을 대체하지 않습니다.</b> 합격선은 연도별 변동이 크고, 표본 수가 적은 학과일수록 오차가 큽니다. 판단의 출발점으로만 쓰고, 최종 결정은 모집요강과 담당 선생님·입학처 상담으로 확정하세요.</div>
@@ -2317,6 +2317,16 @@ const prob = d => Math.round(100/(1+Math.exp(-d/1.0)));
 
 // 합격선 기준 — 'latest': 최신 학년도 / 'avg': 결과가 있는 학년도(2023~2026) 평균
 const CUT_MODES = {latest:'최신 학년도', avg:'학년도 평균'};
+
+// 합격선 수험생의 영어 등급 = 「어디가」 70% 컷 수험생의 실측 등급.
+// 「어디가」는 이 값을 2026학년도에만 공개해서 두 합격선 기준 모두 가장 최근 실측값을 쓴다.
+// 실측이 없는 학과만 1등급으로 가정하고 assumed로 표시한다 (과거 전 학과 1등급 가정은 [E14] 편향).
+function cutEngOf(d){
+  const ys = d.eng ? Object.keys(d.eng).sort() : [];
+  return ys.length ? {grade:d.eng[ys[ys.length-1]], year:+ys[ys.length-1], assumed:false}
+                   : {grade:1, year:null, assumed:true};
+}
+
 function cutOf(d, mode){
   const ys = d.cuts ? Object.keys(d.cuts).sort() : [];
   if(mode==='avg' && ys.length){
@@ -2334,10 +2344,11 @@ function analyze(me, th, overrides, cutMode){
     const prof = (overrides && overrides[key]) ? Object.assign({}, PROFILES[d.p], {ratio: overrides[key]}) : PROFILES[d.p];
     const my = calcScore(prof, normalizeVals(mv, prof.base),
       {engGrade:me.eng.grade, applyBonus:true, mathSel:me.math.sel, tamType:me.tamType});
-    const c = cutOf(d, cutMode);
-    const cs = calcScore(prof, normalizeVals(cutVals(c.v, cal), prof.base), {engGrade:1, applyBonus:false});
+    const c = cutOf(d, cutMode), ce = cutEngOf(d);
+    const cs = calcScore(prof, normalizeVals(cutVals(c.v, cal), prof.base), {engGrade:ce.grade, applyBonus:false});
     const diff = (my.total - cs.total)/10;
     out.push({key, uid:u.id, u:u.name, region:u.region, d:d.n, g:d.g, mg:d.mg, cutP:c.v, cutLabel:c.label,
+      cutEng:ce.grade, cutEngYear:ce.year, cutEngAssumed:ce.assumed,
       cuts:d.cuts||null, cconf:d.cconf||null, eng70:d.eng||null, rate:d.rate, final:d.final,
       // conf: 합격선·반영비율 중 하나라도 추정이면 'e' (UI 추정 배지 기준) [E11]
       conf:(c.conf==='e' || prof.conf==='e') ? 'e' : 'c', cutConf:c.conf, ratioConf:prof.conf, prof, score:my.total, parts:my.parts, caps:my.caps,
@@ -2574,7 +2585,7 @@ function openSheet(key){
     if(p.engMode!=='ratio' && k==='eng'){
       return `<div class="abar"><span class="nm"><span class="dot" style="background:var(${cv})"></span>${lab}</span>
         <span class="track"><i class="fill" style="--bc:var(${cv}); width:0"></i></span>
-        <span class="val"><b>${got>0?'+':''}${got.toFixed(0)}</b> <em>가·감점</em></span></div>`;
+        <span class="val"><b>${got>0?'+':''}${got.toFixed(0)}</b> <em>가·감점 · 컷 ${cut>0?'+':''}${cut.toFixed(0)}</em></span></div>`;
     }
     const w = cap>0 ? Math.max(0, Math.min(100, got/cap*100)) : 0;
     const cw = cap>0 ? Math.max(0, Math.min(100, cut/cap*100)) : 0;
@@ -2606,14 +2617,15 @@ function openSheet(key){
         <span class="txt">${TIER_DESC[r.tier]}<br>
           내 환산 <b style="font-family:'IBM Plex Mono',monospace">${r.score.toFixed(1)}</b> ·
           합격선 환산 <b style="font-family:'IBM Plex Mono',monospace">${r.cutTotal.toFixed(1)}</b>
-          (${r.cutLabel} 70% 컷 평균백분위 ${r.cutP}) → <b style="color:var(${tv})">${sgn(r.diff)}%p</b></span>
+          (${r.cutLabel} 70% 컷 평균백분위 ${r.cutP} · 영어 ${r.cutEng}등급${r.cutEngAssumed?' <em class="est">가정</em>':''}) → <b style="color:var(${tv})">${sgn(r.diff)}%p</b></span>
         <span class="pct" style="color:var(${tv})">${r.p}%</span>
       </div>
 
       ${r.cuts ? `<div class="blk">
         <h4>학년도별 합격선</h4>
         <p class="note">대교협 「어디가」 정시 일반전형 결과 · 최종등록자 70% 컷의 국·수·탐 평균백분위.
-          <i>기울임</i>은 평균백분위 미공개로 과목별 70% 컷에서 계산한 값입니다.${r.rate ? ` 최근 경쟁률 ${r.rate}:1 · 모집 ${r.final}명.` : ''}</p>
+          <i>기울임</i>은 평균백분위 미공개로 과목별 70% 컷에서 계산한 값입니다.
+          영어 등급은 「어디가」가 2026학년도에만 공개해 두 기준 모두 그 값을 씁니다.${r.cutEngAssumed?' 이 학과는 영어 등급 자료가 없어 1등급으로 가정했습니다.':''}${r.rate ? ` 최근 경쟁률 ${r.rate}:1 · 모집 ${r.final}명.` : ''}</p>
         <div class="yrs">${[2023,2024,2025,2026].map(y=>{
           const v = r.cuts[y], est = r.cconf && r.cconf[y]==='e', eg = r.eng70 && r.eng70[y];
           return `<div class="yr${v===undefined?' none':''}"><span class="y">${y}</span>

@@ -15,7 +15,7 @@ const NAMES = [
   'pctToStd', 'stdToPct', 'pctToGrade', 'clamp', 'normStd',
   'avgOf', 'tamAvg', 'calibrate', 'pctToStdCal', 'normalizeVals', 'calcScore',
   'meVals', 'cutVals', 'DEF_TH', 'TIER_ORDER', 'TIER_VAR', 'TIER_DESC',
-  'tierOf', 'prob', 'CUT_MODES', 'cutOf', 'analyze'
+  'tierOf', 'prob', 'CUT_MODES', 'cutEngOf', 'cutOf', 'analyze'
 ];
 
 module.exports = new Function(`${src}\nreturn {${NAMES.join(',')}};`)();

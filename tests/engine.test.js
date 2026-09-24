@@ -204,4 +204,23 @@ group('[E13] 합격선 기준 (최신 학년도 / 학년도 평균)');
   ok('알 수 없는 모드는 최신 학년도로 처리', cutOf({ cut: 90, cy: 2026, conf: 'c' }, 'zzz').v === 90);
 }
 
+group('[E14] 회귀: 합격선 수험생을 영어 1등급으로 가정하던 편향');
+{
+  // 「어디가」 70% 컷 수험생의 실제 영어 등급은 대부분 2~3등급이다.
+  // 1등급으로 가정하면 영어 2등급 이하 학생은 모든 학과에서 체계적으로 불리하게 나왔다.
+  const r = analyze(student(95, { eng: { grade: 3 } }), DEF_TH);
+  const withEng = r.filter(x => !x.cutEngAssumed);
+  ok('합격선 수험생 영어 등급 = 「어디가」 70% 컷 실측 등급',
+    withEng.length > r.length * 0.9 && withEng.every(x => Object.values(x.eng70).includes(x.cutEng)),
+    `${withEng.length}/${r.length}개 실측`);
+  const same = r.filter(x => x.cutEng === 3 && x.prof.engMode === 'ratio');
+  ok('내 영어 등급이 합격선 수험생과 같으면 영어 점수 차가 0',
+    same.length > 0 && same.every(x => Math.abs(x.parts.eng - x.cutParts.eng) < 1e-9), `${same.length}개 학과`);
+  ok('영어 자료가 없는 학과는 1등급 가정으로 계산하고 표시',
+    r.filter(x => x.cutEngAssumed).every(x => x.cutEng === 1));
+  // 「어디가」는 70% 컷 영어 등급을 2026학년도에만 공개한다 → 평균 모드도 같은 실측 등급을 쓴다
+  const avg = analyze(student(95, { eng: { grade: 3 } }), DEF_TH, null, 'avg');
+  ok('평균 모드도 실측 영어 등급 사용', avg.every((x, i) => x.cutEng === r[i].cutEng));
+}
+
 done();

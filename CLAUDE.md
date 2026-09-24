@@ -40,7 +40,7 @@ jeongsi-panse/
 │   ├── _load.js           빌드와 같은 순서로 data+engine을 합쳐 평가하는 로더
 │   ├── harness.js         의존성 없는 최소 assert 하네스
 │   ├── data.test.js       데이터 불변식 11종
-│   └── engine.test.js     엔진 검증 36종 (회귀 테스트 4건 포함)
+│   └── engine.test.js     엔진 검증 40종 (회귀 테스트 5건 포함)
 └── dist/
     ├── index.html         게시본 — Artifact에 올리는 파일
     └── preview.html       로컬 확인용 (doctype 래퍼가 붙은 버전)
@@ -54,7 +54,7 @@ jeongsi-panse/
 ## 3. 명령
 
 ```bash
-npm test      # 데이터 불변식 + 엔진 검증 (47개)
+npm test      # 데이터 불변식 + 엔진 검증 (51개)
 npm run build # dist/index.html 생성 + 게시 규칙 검증
 npm run check # 위 둘을 순서대로
 
@@ -146,7 +146,10 @@ localStorage(반영비율 덮어쓰기, 담아둔 원서 3장)에 저장된다. 
   ↓ ⑤ 5단계 분류 + 로지스틱 합격확률
 ```
 
-합격선 환산총점은 **국·수·탐이 모두 해당 백분위이고 영어 1등급인 가상 수험생**으로 계산한다.
+합격선 환산총점은 **국·수·탐이 모두 해당 백분위이고, 영어는 그 학과 70% 컷 수험생의 실측 등급인
+가상 수험생**으로 계산한다(`cutEngOf()`). 「어디가」는 영어 등급을 2026학년도에만 공개하므로 두 합격선
+기준 모두 그 값을 쓴다. 실측이 없는 학과(7개)만 1등급으로 가정하고 `cutEngAssumed`로 UI에 표시한다.
+예전처럼 전 학과를 1등급으로 가정하면 영어 2등급 이하 학생이 체계적으로 불리해진다 — `[E14]`.
 가산점은 적용하지 않는다(합격선이 평균 백분위 기준이므로).
 
 ### ★ 대응표 보정 — 이 프로젝트에서 가장 중요한 한 줄
@@ -165,7 +168,7 @@ localStorage(반영비율 덮어쓰기, 담아둔 원서 3장)에 저장된다. 
 ### 엔진을 수정할 때 지킬 것
 
 1. `analyze(me, th, overrides, cutMode)`의 반환 형태(`{key, u, d, g, mg, cutP, cutLabel, cuts, cconf, eng70,
-   rate, final, conf, cutConf, ratioConf, prof, score, parts, caps, cutTotal, cutParts, diff, tier, p}`)는
+   rate, final, cutEng, cutEngYear, cutEngAssumed, conf, cutConf, ratioConf, prof, score, parts, caps, cutTotal, cutParts, diff, tier, p}`)는
    UI와의 계약이다. `conf`는 `cutConf`/`ratioConf`를 합친 값이다. 필드를 빼면 UI가 조용히 깨진다.
    `cutMode`는 `'latest'`(기본, 최신 학년도) / `'avg'`(결과 있는 학년도 평균) — `cutOf()`, `[E13]`.
 2. **단조성을 깨지 말 것**: 성적이 오르면 어떤 학과에서도 격차가 줄면 안 된다.
@@ -218,7 +221,7 @@ localStorage(반영비율 덮어쓰기, 담아둔 원서 3장)에 저장된다. 
 ## 7. 변경 절차
 
 1. `src/` 아래를 고친다. `dist/`는 **절대 직접 수정하지 않는다** (빌드 산출물).
-2. `npm run check` — 테스트 47개 통과 + 빌드 성공.
+2. `npm run check` — 테스트 51개 통과 + 빌드 성공.
 3. 시각 변경이면 `dist/preview.html`을 브라우저(또는 Playwright)로 **한 번** 확인한다.
    라이트/다크/모바일(400px) 세 폭에서 가로 스크롤이 생기지 않아야 한다.
 4. `dist/index.html`을 기존 Artifact URL에 **재게시**한다 (새 아티팩트를 만들지 않는다).
@@ -226,7 +229,7 @@ localStorage(반영비율 덮어쓰기, 담아둔 원서 3장)에 저장된다. 
 
 ### 새 동작을 추가할 때
 
-버그를 고쳤으면 **그 버그를 재현하는 테스트를 먼저 남긴다.** `[E2]`와 `[E6]`이 그 예다.
+버그를 고쳤으면 **그 버그를 재현하는 테스트를 먼저 남긴다.** `[E2]`, `[E6]`, `[E14]`가 그 예다.
 둘 다 실제로 겪은 오류이고, 테스트 이름에 "회귀"라고 적혀 있다.
 
 ---
