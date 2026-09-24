@@ -28,6 +28,18 @@ const pctToGrade = p => { for(let i=0;i<9;i++) if(p>=GRADE_CUT[i]) return i+1; r
 const clamp = v => Math.max(0, Math.min(100, v));
 const normStd = (s,a) => clamp(s / STD_MAX[a] * 100);
 
+// 표준점수·백분위 중 한쪽만 입력된 영역은 대응 곡선으로 빈 쪽을 채운다. [E15]
+// 채우지 않으면 백분위만 넣은 학생은 표준점수 반영 대학에서 그 영역이 0점이 된다.
+function fillPair(o, a){
+  const std = o.std > 0 ? o.std : (o.pct > 0 ? Math.round(pctToStd(o.pct, a)) : 0);
+  const pct = o.pct > 0 ? o.pct : (o.std > 0 ? stdToPct(o.std, a) : 0);
+  return Object.assign({}, o, {std, pct});
+}
+const completeScores = me => Object.assign({}, me, {
+  kor: fillPair(me.kor, 'kor'), math: fillPair(me.math, 'math'),
+  tam: me.tam.map(t => fillPair(t, 'tam'))
+});
+
 // 탐구 두 과목 평균 — 비어 있는(0) 과목은 빼고 입력된 과목만 평균한다.
 // 빈 과목을 0점으로 평균하면 탐구 점수가 반토막 나고 보정값이 한계까지 밀린다. [E12]
 const avgOf = xs => { const v = xs.filter(x => x > 0); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : 0; };
@@ -113,6 +125,7 @@ function cutOf(d, mode){
 }
 
 function analyze(me, th, overrides, cutMode){
+  me = completeScores(me);
   const mv = meVals(me), cal = calibrate(me), out = [];
   for(const u of UNIVS) for(const d of u.depts){
     const key = u.id + '·' + d.n;
